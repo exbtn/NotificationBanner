@@ -34,6 +34,8 @@ public protocol NotificationBannerDelegate: class {
 
 public class BaseNotificationBanner: UIView {
     
+    public static let sizeDidChangeNotification = NSNotification.Name(rawValue: "UINotificationSizeDidChange")
+    
     /// The delegate of the notification banner
     public weak var delegate: NotificationBannerDelegate?
 
@@ -126,6 +128,10 @@ public class BaseNotificationBanner: UIView {
         return [NotificationBanner.BannerObjectKey: self]
     }
     
+    private var bannerWidth: CGFloat {
+        return self.parentViewController?.view.frame.width ?? self.appWindow.frame.width
+    }
+    
     public override var backgroundColor: UIColor? {
         get {
             return contentView.backgroundColor
@@ -161,7 +167,7 @@ public class BaseNotificationBanner: UIView {
     
     deinit {
         NotificationCenter.default.removeObserver(self,
-                                                  name: UIDevice.orientationDidChangeNotification,
+                                                  name: BaseNotificationBanner.sizeDidChangeNotification,
                                                   object: nil)
     }
     
@@ -297,17 +303,17 @@ public class BaseNotificationBanner: UIView {
             self.bannerPosition = bannerPosition
             createBannerConstraints(for: bannerPosition)
             bannerPositionFrame = BannerPositionFrame(bannerPosition: bannerPosition,
-                                                      bannerWidth: appWindow.frame.width,
+                                                      bannerWidth: bannerWidth,
                                                       bannerHeight: bannerHeight,
                                                       maxY: maximumYPosition())
         }
         
         NotificationCenter.default.removeObserver(self,
-                                                  name: UIDevice.orientationDidChangeNotification,
+                                                  name: BaseNotificationBanner.sizeDidChangeNotification,
                                                   object: nil)
         NotificationCenter.default.addObserver(self,
-                                               selector: #selector(onOrientationChanged),
-                                               name: UIDevice.orientationDidChangeNotification,
+                                               selector: #selector(onSizeChanged),
+                                               name: BaseNotificationBanner.sizeDidChangeNotification,
                                                object: nil)
         
         if placeOnQueue {
@@ -380,22 +386,29 @@ public class BaseNotificationBanner: UIView {
         }
     }
     
+    @objc
+    func onSizeChanged() {
+        onOrientationChanged()
+    }
+    
     /**
         Changes the frame of the notification banner when the orientation of the device changes
     */
     @objc private dynamic func onOrientationChanged() {
-        updateSpacerViewHeight()
-        
-        let newY = (bannerPosition == .top) ? (frame.origin.y) : (appWindow.frame.height - bannerHeight)
-        frame = CGRect(x: frame.origin.x,
-                       y: newY,
-                       width: appWindow.frame.width,
-                       height: bannerHeight)
-    
-        bannerPositionFrame = BannerPositionFrame(bannerPosition: bannerPosition,
-                                                  bannerWidth: appWindow.frame.width,
-                                                  bannerHeight: bannerHeight,
-                                                  maxY: maximumYPosition())
+        DispatchQueue.main.async {
+            self.updateSpacerViewHeight()
+            
+            let newY = (self.bannerPosition == .top) ? (self.frame.origin.y) : (self.appWindow.frame.height - self.bannerHeight)
+            self.frame = CGRect(x: self.frame.origin.x,
+                                y: newY,
+                                width: self.bannerWidth,
+                                height: self.bannerHeight)
+            
+            self.bannerPositionFrame = BannerPositionFrame(bannerPosition: self.bannerPosition,
+                                                           bannerWidth: self.bannerWidth,
+                                                           bannerHeight: self.bannerHeight,
+                                                           maxY: self.maximumYPosition())
+        }
     }
     
     /**
@@ -465,3 +478,9 @@ public class BaseNotificationBanner: UIView {
     }
 }
 
+fileprivate extension UIWindow {
+    override open func layoutSubviews() {
+        super.layoutSubviews()
+        NotificationCenter.default.post(name: BaseNotificationBanner.sizeDidChangeNotification, object: nil)
+    }
+}
